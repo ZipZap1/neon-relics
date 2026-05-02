@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Neon Relics — Premium Idle Card Prototype</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="aurora aurora-a"></div>
+  <div class="aurora aurora-b"></div>
+  <div class="stars"></div>
+  <canvas id="fxCanvas" aria-hidden="true"></canvas>
+
+  <main class="shell">
+    <section class="hero panel glass">
+      <div>
+        <p class="eyebrow">Idle Card Hybrid</p>
+        <h1>Neon Relics</h1>
+        <p class="subtitle">Sammle lebendige Relikt-Karten, fusioniere Energiekerne und baue eine leuchtende Produktionsmaschine auf.</p>
+      </div>
+      <div class="hero-actions">
+        <button id="openPackBtn" class="btn primary"><span>Relikt öffnen</span></button>
+        <button id="overdriveBtn" class="btn ghost"><span>Overdrive</span></button>
+      </div>
+    </section>
+
+    <section class="stats-grid">
+      <article class="stat-card glass">
+        <span class="stat-label">Credits</span>
+        <strong id="credits">0</strong>
+        <small>+<span id="cps">0</span>/s</small>
+      </article>
+      <article class="stat-card glass">
+        <span class="stat-label">Energie</span>
+        <strong id="energy">0</strong>
+        <small>Relikte aktivieren</small>
+      </article>
+      <article class="stat-card glass">
+        <span class="stat-label">Sammlung</span>
+        <strong id="collectionCount">0</strong>
+        <small>aktive Karten</small>
+      </article>
+      <article class="stat-card glass pulse-border">
+        <span class="stat-label">Multiplikator</span>
+        <strong id="multiplier">1.00×</strong>
+        <small id="overdriveText">stabil</small>
+      </article>
+    </section>
+
+    <section class="layout">
+      <aside class="panel glass shop-panel">
+        <div class="section-title">
+          <p class="eyebrow">Upgrade Lab</p>
+          <h2>Forschung</h2>
+        </div>
+        <div id="upgrades" class="upgrades"></div>
+      </aside>
+
+      <section class="panel glass collection-panel">
+        <div class="section-title row">
+          <div>
+            <p class="eyebrow">Collection</p>
+            <h2>Aktive Relikte</h2>
+          </div>
+          <div class="pack-cost">Pack: <strong id="packCost">50</strong> Credits</div>
+        </div>
+        <div id="cards" class="cards"></div>
+      </section>
+    </section>
+  </main>
+
+  <div id="packReveal" class="pack-reveal hidden" role="dialog" aria-modal="true">
+    <div class="reveal-backdrop"></div>
+    <div class="reveal-card-wrap">
+      <div id="revealedCard" class="relic-card reveal"></div>
+      <button id="collectBtn" class="btn primary collect-btn">In Sammlung aufnehmen</button>
+    </div>
+  </div>
+
+  <template id="cardTemplate">
+    <article class="relic-card">
+      <div class="card-shine"></div>
+      <div class="rarity-chip"></div>
+      <div class="orb"></div>
+      <h3></h3>
+      <p></p>
+      <div class="card-footer">
+        <span class="power"></span>
+        <button class="mini-btn upgrade-card">Upgrade</button>
+      </div>
+    </article>
+  </template>
+
+  <script src="./game.js"></script>
+</body>
+</html>
