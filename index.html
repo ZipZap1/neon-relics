@@ -29,6 +29,7 @@
         <button id="openPackBtn" class="btn primary"><span>Relikt öffnen</span></button>
         <button id="overdriveBtn" class="btn ghost"><span>Overdrive</span></button>
         <button id="soundBtn" class="btn ghost small"><span>Sound aus</span></button>
+        <button id="settingsBtn" class="btn ghost small"><span>Settings</span></button>
       </div>
     </section>
 
@@ -80,6 +81,12 @@
           <h2>Forschung</h2>
         </div>
         <div id="upgrades" class="upgrades"></div>
+
+        <div class="section-title quest-title">
+          <p class="eyebrow">Mission Control</p>
+          <h2>Quests</h2>
+        </div>
+        <div id="quests" class="quests"></div>
       </aside>
 
       <section class="panel glass collection-panel">
@@ -106,6 +113,19 @@
       <p id="chestReward">+0 Credits</p>
       <button id="chestCloseBtn" class="btn primary">Einsammeln</button>
     </div>
+  </div>
+
+  <div id="settingsModal" class="settings-modal glass hidden" role="dialog" aria-modal="true">
+    <p class="eyebrow">Settings</p>
+    <h2>Spielstand & Komfort</h2>
+    <div class="settings-grid">
+      <button id="exportSaveBtn" class="btn ghost">Save exportieren</button>
+      <button id="importSaveBtn" class="btn ghost">Save importieren</button>
+      <button id="reduceMotionBtn" class="btn ghost">Animationen reduzieren</button>
+      <button id="resetSaveBtn" class="btn danger">Save löschen</button>
+    </div>
+    <textarea id="saveBox" class="save-box" placeholder="Export erscheint hier. Zum Import Save-Code einfügen."></textarea>
+    <button id="settingsCloseBtn" class="btn primary">Schließen</button>
   </div>
 
   <div id="tutorial" class="tutorial glass hidden" role="dialog" aria-modal="true">
@@ -135,6 +155,7 @@
       <div class="orb"></div>
       <h3></h3>
       <p></p>
+      <div class="ability"></div>
       <div class="card-meta">
         <span class="level"></span>
         <span class="copies"></span>

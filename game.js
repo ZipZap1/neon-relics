@@ -11,6 +11,9 @@ const state = {
   tutorialSeen: false,
   zone: 0,
   lastDailyChest: '',
+  questClaims: {},
+  stats: { packsOpened: 0, fusions: 0, upgrades: 0, dailyChests: 0 },
+  settings: { reduceMotion: false },
   cards: [],
   upgrades: [
     { id: 'reactor', name: 'Quanten-Reaktor', desc: '+25% Produktion aller Relikte.', level: 0, baseCost: 180, effect: 0.25 },
@@ -20,18 +23,18 @@ const state = {
 };
 
 const relics = [
-  { name: 'Aether Core', rarity: 'common', power: 2, text: 'Ein stabiler Kern aus kaltem Neonlicht.' },
-  { name: 'Pulse Shard', rarity: 'common', power: 3, text: 'Pulsiert ruhig und produziert konstante Credits.' },
-  { name: 'Glass Comet', rarity: 'common', power: 3.5, text: 'Ein Komet aus splitterndem Licht.' },
-  { name: 'Vanta Sigil', rarity: 'rare', power: 7, text: 'Ein dunkles Siegel mit türkisfarbener Resonanz.' },
-  { name: 'Chrome Lotus', rarity: 'rare', power: 9, text: 'Öffnet sich bei jedem Produktionszyklus.' },
-  { name: 'Neon Mantis', rarity: 'rare', power: 10, text: 'Schneidet Leerlauf aus jeder Maschine.' },
-  { name: 'Nova Crown', rarity: 'epic', power: 18, text: 'Eine Krone aus überladener Sternenenergie.' },
-  { name: 'Dream Engine', rarity: 'epic', power: 22, text: 'Verwandelt Schlafdaten in Credits. Frag nicht.' },
-  { name: 'Void Harp', rarity: 'epic', power: 26, text: 'Spielt Frequenzen, die Portale öffnen.' },
-  { name: 'Solar Wraith', rarity: 'legendary', power: 55, text: 'Ein legendäres Relikt, das Raumlicht verbrennt.' },
-  { name: 'Godspark Array', rarity: 'legendary', power: 72, text: 'Eine Maschine, die Maschinen träumen lässt.' },
-  { name: 'Chrono Saint', rarity: 'legendary', power: 88, text: 'Faltet Sekunden zu funkelnden Dividenden.' },
+  { name: 'Aether Core', rarity: 'common', power: 2, text: 'Ein stabiler Kern aus kaltem Neonlicht.', ability: { key: 'cps', label: '+2% globale Produktion', value: 0.02 } },
+  { name: 'Pulse Shard', rarity: 'common', power: 3, text: 'Pulsiert ruhig und produziert konstante Credits.', ability: { key: 'energy', label: '+4% Energiegewinn', value: 0.04 } },
+  { name: 'Glass Comet', rarity: 'common', power: 3.5, text: 'Ein Komet aus splitterndem Licht.', ability: { key: 'packDiscount', label: '-2% Packkosten', value: 0.02 } },
+  { name: 'Vanta Sigil', rarity: 'rare', power: 7, text: 'Ein dunkles Siegel mit türkisfarbener Resonanz.', ability: { key: 'cps', label: '+5% globale Produktion', value: 0.05 } },
+  { name: 'Chrome Lotus', rarity: 'rare', power: 9, text: 'Öffnet sich bei jedem Produktionszyklus.', ability: { key: 'chest', label: '+8% Daily-Chest', value: 0.08 } },
+  { name: 'Neon Mantis', rarity: 'rare', power: 10, text: 'Schneidet Leerlauf aus jeder Maschine.', ability: { key: 'packDiscount', label: '-5% Packkosten', value: 0.05 } },
+  { name: 'Nova Crown', rarity: 'epic', power: 18, text: 'Eine Krone aus überladener Sternenenergie.', ability: { key: 'cps', label: '+12% globale Produktion', value: 0.12 } },
+  { name: 'Dream Engine', rarity: 'epic', power: 22, text: 'Verwandelt Schlafdaten in Credits. Frag nicht.', ability: { key: 'offline', label: '+20% Offline-Ertrag', value: 0.20 } },
+  { name: 'Void Harp', rarity: 'epic', power: 26, text: 'Spielt Frequenzen, die Portale öffnen.', ability: { key: 'overdrive', label: '+20% Overdrive-Dauer', value: 0.20 } },
+  { name: 'Solar Wraith', rarity: 'legendary', power: 55, text: 'Ein legendäres Relikt, das Raumlicht verbrennt.', ability: { key: 'cps', label: '+30% globale Produktion', value: 0.30 } },
+  { name: 'Godspark Array', rarity: 'legendary', power: 72, text: 'Eine Maschine, die Maschinen träumen lässt.', ability: { key: 'chest', label: '+45% Daily-Chest', value: 0.45 } },
+  { name: 'Chrono Saint', rarity: 'legendary', power: 88, text: 'Faltet Sekunden zu funkelnden Dividenden.', ability: { key: 'offline', label: '+55% Offline-Ertrag', value: 0.55 } },
 ];
 
 const rarityWeight = { common: 70, rare: 23, epic: 6, legendary: 1 };
@@ -46,6 +49,14 @@ const zones = [
   { name: 'Godspark Gate', desc: 'Öffne das Tor für legendäre Reliktketten.', goal: 1800, reward: 26000 },
 ];
 
+const questDefs = [
+  { id: 'open5', title: 'Packjäger', desc: 'Öffne 5 Relikt-Packs.', goal: 5, rewardCredits: 550, rewardEnergy: 40, progress: () => state.stats.packsOpened },
+  { id: 'firstFusion', title: 'Schmiede erwacht', desc: 'Fusioniere deine erste Karte.', goal: 1, rewardCredits: 900, rewardEnergy: 70, progress: () => state.stats.fusions },
+  { id: 'tenCards', title: 'Sammlerfunke', desc: 'Besitze 10 aktive Relikte.', goal: 10, rewardCredits: 1400, rewardEnergy: 90, progress: () => state.cards.length },
+  { id: 'cps100', title: 'Maschine läuft', desc: 'Erreiche 100 Credits pro Sekunde.', goal: 100, rewardCredits: 2200, rewardEnergy: 120, progress: () => baseCps() },
+  { id: 'zone3', title: 'Neon-Reisender', desc: 'Erreiche Zone 3.', goal: 3, rewardCredits: 4200, rewardEnergy: 180, progress: () => state.zone + 1 },
+];
+
 const els = {
   credits: document.querySelector('#credits'),
   energy: document.querySelector('#energy'),
@@ -55,10 +66,12 @@ const els = {
   overdriveText: document.querySelector('#overdriveText'),
   cards: document.querySelector('#cards'),
   upgrades: document.querySelector('#upgrades'),
+  quests: document.querySelector('#quests'),
   packCost: document.querySelector('#packCost'),
   openPackBtn: document.querySelector('#openPackBtn'),
   overdriveBtn: document.querySelector('#overdriveBtn'),
   soundBtn: document.querySelector('#soundBtn'),
+  settingsBtn: document.querySelector('#settingsBtn'),
   dailyChestBtn: document.querySelector('#dailyChestBtn'),
   zoneName: document.querySelector('#zoneName'),
   zoneDesc: document.querySelector('#zoneDesc'),
@@ -76,6 +89,13 @@ const els = {
   packReveal: document.querySelector('#packReveal'),
   revealedCard: document.querySelector('#revealedCard'),
   collectBtn: document.querySelector('#collectBtn'),
+  settingsModal: document.querySelector('#settingsModal'),
+  settingsCloseBtn: document.querySelector('#settingsCloseBtn'),
+  exportSaveBtn: document.querySelector('#exportSaveBtn'),
+  importSaveBtn: document.querySelector('#importSaveBtn'),
+  resetSaveBtn: document.querySelector('#resetSaveBtn'),
+  reduceMotionBtn: document.querySelector('#reduceMotionBtn'),
+  saveBox: document.querySelector('#saveBox'),
   template: document.querySelector('#cardTemplate'),
   canvas: document.querySelector('#fxCanvas'),
 };
@@ -85,6 +105,7 @@ let last = performance.now();
 let particles = [];
 let saveTimer = 0;
 let toastTimer = 0;
+let lastQuestHud = 0;
 let audioCtx = null;
 const ctx = els.canvas.getContext('2d');
 
@@ -110,6 +131,12 @@ function upgradeCost(upgrade) { return Math.floor(upgrade.baseCost * Math.pow(1.
 function cardUpgradeCost(card) { return Math.floor(80 * rarityBonus[card.rarity] * Math.pow(1.65, card.level - 1)); }
 function fuseCost(card) { return Math.floor(55 * rarityBonus[card.rarity] * Math.pow(1.52, card.fusion || 0)); }
 function currentMultiplier() { return performance.now() < state.overdriveUntil ? 3 : state.multiplier; }
+function abilityScale(card) { return 1 + (card.fusion || 0) * 0.25 + (card.level - 1) * 0.04; }
+function abilityBonus(key) {
+  return state.cards.reduce((sum, card) => sum + (card.ability?.key === key ? card.ability.value * abilityScale(card) : 0), 0);
+}
+function discountedPackCost() { return Math.floor(state.packCost * Math.max(0.62, 1 - abilityBonus('packDiscount'))); }
+function energyGain(amount) { return amount * (1 + abilityBonus('energy')); }
 
 function cardProduction(card) {
   const forge = 1 + getUpgrade('forge').level * 0.05;
@@ -119,7 +146,7 @@ function cardProduction(card) {
 
 function baseCps() {
   const reactor = 1 + getUpgrade('reactor').level * getUpgrade('reactor').effect;
-  return state.cards.reduce((sum, card) => sum + cardProduction(card), 0) * reactor;
+  return state.cards.reduce((sum, card) => sum + cardProduction(card), 0) * reactor * (1 + abilityBonus('cps'));
 }
 
 function totalCps() { return baseCps() * currentMultiplier(); }
@@ -152,6 +179,10 @@ function loadGame() {
     state.tutorialSeen = Boolean(save.tutorialSeen);
     state.zone = Math.max(0, Math.min(zones.length - 1, Number(save.zone) || 0));
     state.lastDailyChest = String(save.lastDailyChest || '');
+    state.questClaims = save.questClaims && typeof save.questClaims === 'object' ? save.questClaims : {};
+    state.stats = { ...state.stats, ...(save.stats && typeof save.stats === 'object' ? save.stats : {}) };
+    state.settings = { ...state.settings, ...(save.settings && typeof save.settings === 'object' ? save.settings : {}) };
+    applySettings();
     state.cards = Array.isArray(save.cards) ? save.cards.map(normalizeCard) : [];
     state.upgrades.forEach(upgrade => {
       const saved = save.upgrades?.find?.(u => u.id === upgrade.id);
@@ -159,7 +190,7 @@ function loadGame() {
     });
     const elapsed = Math.min(OFFLINE_CAP_SECONDS, Math.max(0, (Date.now() - (Number(save.savedAt) || Date.now())) / 1000));
     if (elapsed > 20 && state.cards.length) {
-      const earned = baseCps() * elapsed * 0.55;
+      const earned = baseCps() * elapsed * 0.55 * (1 + abilityBonus('offline'));
       state.credits += earned;
       showOffline(earned, elapsed);
     }
@@ -179,6 +210,9 @@ function saveGame() {
     tutorialSeen: state.tutorialSeen,
     zone: state.zone,
     lastDailyChest: state.lastDailyChest,
+    questClaims: state.questClaims,
+    stats: state.stats,
+    settings: state.settings,
     upgrades: state.upgrades.map(({ id, level }) => ({ id, level })),
     cards: state.cards.map(({ id, name, level, power, copies, fusion }) => ({ id, name, level, power, copies, fusion })),
     savedAt: Date.now(),
@@ -189,6 +223,11 @@ function saveGame() {
 function scheduleSave() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveGame, 250);
+}
+
+function applySettings() {
+  document.body.classList.toggle('reduce-motion', Boolean(state.settings.reduceMotion));
+  if (els.reduceMotionBtn) els.reduceMotionBtn.textContent = state.settings.reduceMotion ? 'Animationen normal' : 'Animationen reduzieren';
 }
 
 function showOffline(earned, elapsed) {
@@ -241,11 +280,12 @@ function checkZoneProgress() {
 function openDailyChest() {
   const today = todayKey();
   if (state.lastDailyChest === today) return;
-  const rewardCredits = Math.floor(350 + baseCps() * 90 + state.zone * 450);
-  const rewardEnergy = 45 + state.zone * 10;
+  const rewardCredits = Math.floor((350 + baseCps() * 90 + state.zone * 450) * (1 + abilityBonus('chest')));
+  const rewardEnergy = Math.floor(energyGain(45 + state.zone * 10));
   state.credits += rewardCredits;
   state.energy += rewardEnergy;
   state.lastDailyChest = today;
+  state.stats.dailyChests++;
   els.chestTitle.textContent = 'Daily Chest geöffnet';
   els.chestReward.textContent = `+${format(rewardCredits)} Credits · +${format(rewardEnergy)} Energie`;
   els.chestReveal.classList.remove('hidden');
@@ -309,16 +349,21 @@ function createCardElement(card, reveal = false) {
   node.querySelector('.rarity-chip').textContent = rarityLabel[card.rarity];
   node.querySelector('h3').textContent = card.name;
   node.querySelector('p').textContent = card.text;
+  node.querySelector('.ability').textContent = card.ability?.label || 'Basis-Produktion';
   node.querySelector('.level').textContent = `Lvl ${card.level} · F${card.fusion || 0}`;
   node.querySelector('.copies').textContent = `Kopien ${card.copies || 0}/2`;
   node.querySelector('.power').textContent = `⚡ ${format(cardProduction(card))}/s`;
   const upgradeBtn = node.querySelector('.upgrade-card');
-  upgradeBtn.textContent = `Upgrade ${format(cardUpgradeCost(card))}`;
-  upgradeBtn.addEventListener('click', () => upgradeCard(card.id, node));
   const fuseBtn = node.querySelector('.fuse-card');
-  fuseBtn.textContent = `Fusion ${format(fuseCost(card))}`;
-  fuseBtn.disabled = (card.copies || 0) < 2 || state.credits < fuseCost(card);
-  fuseBtn.addEventListener('click', () => fuseCard(card.id, node));
+  if (reveal) {
+    node.querySelector('.card-buttons').remove();
+  } else {
+    upgradeBtn.textContent = `Upgrade ${format(cardUpgradeCost(card))}`;
+    upgradeBtn.addEventListener('click', () => upgradeCard(card.id, node));
+    fuseBtn.textContent = `Fusion ${format(fuseCost(card))}`;
+    fuseBtn.disabled = (card.copies || 0) < 2 || state.credits < fuseCost(card);
+    fuseBtn.addEventListener('click', () => fuseCard(card.id, node));
+  }
   node.addEventListener('pointermove', (e) => tiltCard(e, node));
   node.addEventListener('pointerleave', () => node.style.transform = '');
   return node;
@@ -361,12 +406,46 @@ function renderUpgrades() {
       if (state.credits < cost) return;
       state.credits -= cost;
       upgrade.level++;
+      state.stats.upgrades++;
       sound('buy');
       burst(innerWidth * .2, innerHeight * .42, upgrade.id === 'lens' ? '#ff3ef2' : '#25f4ff', 34);
-      renderUpgrades(); renderCards(); updateHud(); scheduleSave();
+      renderUpgrades(); renderCards(); renderQuests(); updateHud(); scheduleSave();
     });
     els.upgrades.append(node);
   });
+}
+
+function renderQuests() {
+  els.quests.innerHTML = '';
+  questDefs.forEach(quest => {
+    const progress = Math.min(quest.goal, quest.progress());
+    const done = progress >= quest.goal;
+    const claimed = Boolean(state.questClaims[quest.id]);
+    const node = document.createElement('article');
+    node.className = `quest ${done ? 'done' : ''} ${claimed ? 'claimed' : ''}`;
+    node.innerHTML = `
+      <div class="quest-top"><strong>${quest.title}</strong><span>${format(progress)}/${format(quest.goal)}</span></div>
+      <p>${quest.desc}</p>
+      <div class="quest-bar"><span style="width:${Math.min(100, progress / quest.goal * 100)}%"></span></div>
+      <button class="mini-btn">${claimed ? 'Abgeholt' : done ? `Claim +${format(quest.rewardCredits)}` : 'Noch offen'}</button>
+    `;
+    const btn = node.querySelector('button');
+    btn.disabled = !done || claimed;
+    btn.addEventListener('click', () => claimQuest(quest.id));
+    els.quests.append(node);
+  });
+}
+
+function claimQuest(id) {
+  const quest = questDefs.find(q => q.id === id);
+  if (!quest || state.questClaims[id] || quest.progress() < quest.goal) return;
+  state.questClaims[id] = true;
+  state.credits += quest.rewardCredits;
+  state.energy += quest.rewardEnergy;
+  sound('legendary');
+  burst(innerWidth * .24, innerHeight * .58, '#49ffb2', 72);
+  showToast(`${quest.title}: +${format(quest.rewardCredits)} Credits · +${format(quest.rewardEnergy)} Energie`);
+  renderQuests(); renderUpgrades(); updateHud(); scheduleSave();
 }
 
 function updateHud() {
@@ -378,11 +457,15 @@ function updateHud() {
   els.multiplier.textContent = currentMultiplier().toFixed(2) + '×';
   const remaining = Math.max(0, Math.ceil((state.overdriveUntil - performance.now()) / 1000));
   els.overdriveText.textContent = remaining ? `Overdrive ${remaining}s` : 'stabil';
-  els.packCost.textContent = format(state.packCost);
-  els.openPackBtn.disabled = state.credits < state.packCost;
+  els.packCost.textContent = format(discountedPackCost());
+  els.openPackBtn.disabled = state.credits < discountedPackCost();
   els.overdriveBtn.disabled = state.energy < 100 || performance.now() < state.overdriveUntil;
   els.soundBtn.querySelector('span').textContent = state.soundEnabled ? 'Sound an' : 'Sound aus';
   updateZoneHud();
+  if (performance.now() - lastQuestHud > 650) {
+    lastQuestHud = performance.now();
+    renderQuests();
+  }
   document.querySelectorAll('.upgrade').forEach((node, idx) => node.querySelector('button').disabled = state.credits < upgradeCost(state.upgrades[idx]));
   document.querySelectorAll('.relic-card:not(.reveal)').forEach((node, idx) => {
     const card = state.cards[idx];
@@ -393,16 +476,20 @@ function updateHud() {
 }
 
 function openPack() {
-  if (state.credits < state.packCost) return;
-  state.credits -= state.packCost;
+  const cost = discountedPackCost();
+  if (state.credits < cost) return;
+  state.credits -= cost;
   state.packCost = Math.floor(state.packCost * 1.18 + 12);
+  state.stats.packsOpened++;
   pendingCard = pickRelic();
   els.revealedCard.replaceWith(createCardElement(pendingCard, true));
   els.revealedCard = document.querySelector('.relic-card.reveal');
   els.packReveal.classList.remove('hidden');
+  els.packReveal.classList.add('opening');
+  setTimeout(() => els.packReveal.classList.remove('opening'), 900);
   sound(pendingCard.rarity === 'legendary' ? 'legendary' : 'pack');
   burst(innerWidth / 2, innerHeight / 2, colorFor(pendingCard.rarity), pendingCard.rarity === 'legendary' ? 150 : 72);
-  updateHud(); scheduleSave();
+  renderQuests(); updateHud(); scheduleSave();
 }
 
 function collectPending() {
@@ -416,11 +503,11 @@ function collectPending() {
     state.cards.unshift(pendingCard);
     showToast(`${pendingCard.name} aufgenommen`);
   }
-  state.energy += 12 * rarityBonus[pendingCard.rarity];
+  state.energy += energyGain(12 * rarityBonus[pendingCard.rarity]);
   burst(innerWidth / 2, innerHeight / 2, colorFor(pendingCard.rarity), 45);
   pendingCard = null;
   els.packReveal.classList.add('hidden');
-  renderCards(); renderUpgrades(); updateHud(); scheduleSave();
+  renderCards(); renderUpgrades(); renderQuests(); updateHud(); scheduleSave();
 }
 
 function upgradeCard(id, node) {
@@ -431,9 +518,11 @@ function upgradeCard(id, node) {
   card.level++;
   card.power *= 1.18;
   const r = node.getBoundingClientRect();
+  node.classList.add('level-up');
+  setTimeout(() => node.classList.remove('level-up'), 700);
   sound('buy');
   burst(r.left + r.width / 2, r.top + r.height / 2, colorFor(card.rarity), 34);
-  renderCards(); renderUpgrades(); updateHud(); scheduleSave();
+  renderCards(); renderUpgrades(); renderQuests(); updateHud(); scheduleSave();
 }
 
 function fuseCard(id, node) {
@@ -444,17 +533,19 @@ function fuseCard(id, node) {
   card.copies -= 2;
   card.fusion = (card.fusion || 0) + 1;
   card.power *= 1.42;
+  state.stats.fusions++;
   const r = node.getBoundingClientRect();
+  showFusionFlash(card);
   sound('fuse');
   burst(r.left + r.width / 2, r.top + r.height / 2, colorFor(card.rarity), 95);
   showToast(`${card.name} fusioniert → F${card.fusion}`);
-  renderCards(); renderUpgrades(); updateHud(); scheduleSave();
+  renderCards(); renderUpgrades(); renderQuests(); updateHud(); scheduleSave();
 }
 
 function activateOverdrive() {
   if (state.energy < 100 || performance.now() < state.overdriveUntil) return;
   state.energy -= 100;
-  state.overdriveUntil = performance.now() + 15000;
+  state.overdriveUntil = performance.now() + 15000 * (1 + abilityBonus('overdrive'));
   sound('overdrive');
   burst(innerWidth / 2, 120, '#49ffb2', 110);
   updateHud(); scheduleSave();
@@ -468,6 +559,51 @@ function toggleSound() {
 
 function colorFor(rarity) {
   return { common: '#7fc7ff', rare: '#25f4ff', epic: '#ff3ef2', legendary: '#ffd166' }[rarity];
+}
+
+function showFusionFlash(card) {
+  const flash = document.createElement('div');
+  flash.className = `fusion-flash ${card.rarity}`;
+  flash.innerHTML = `<div><span>FUSION</span><strong>${card.name} · F${card.fusion}</strong></div>`;
+  document.body.append(flash);
+  setTimeout(() => flash.remove(), 1200);
+}
+
+function openSettings() {
+  els.saveBox.value = '';
+  els.settingsModal.classList.remove('hidden');
+}
+
+function closeSettings() { els.settingsModal.classList.add('hidden'); }
+
+function exportSave() {
+  saveGame();
+  els.saveBox.value = btoa(unescape(encodeURIComponent(localStorage.getItem(SAVE_KEY) || '{}')));
+  els.saveBox.select();
+  showToast('Save-Code exportiert');
+}
+
+function importSave() {
+  try {
+    const raw = decodeURIComponent(escape(atob(els.saveBox.value.trim())));
+    JSON.parse(raw);
+    localStorage.setItem(SAVE_KEY, raw);
+    location.reload();
+  } catch {
+    showToast('Import fehlgeschlagen: Save-Code prüfen');
+  }
+}
+
+function resetSave() {
+  if (!confirm('Spielstand wirklich löschen?')) return;
+  localStorage.removeItem(SAVE_KEY);
+  location.reload();
+}
+
+function toggleReduceMotion() {
+  state.settings.reduceMotion = !state.settings.reduceMotion;
+  applySettings();
+  scheduleSave();
 }
 
 function burst(x, y, color, amount = 40) {
@@ -502,7 +638,7 @@ function tick(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   state.credits += totalCps() * dt;
-  state.energy += state.cards.length ? dt * 0.8 * currentMultiplier() : 0;
+  state.energy += state.cards.length ? energyGain(dt * 0.8 * currentMultiplier()) : 0;
   renderParticles(dt);
   checkZoneProgress();
   updateHud();
@@ -513,6 +649,12 @@ els.openPackBtn.addEventListener('click', openPack);
 els.collectBtn.addEventListener('click', collectPending);
 els.overdriveBtn.addEventListener('click', activateOverdrive);
 els.soundBtn.addEventListener('click', toggleSound);
+els.settingsBtn.addEventListener('click', openSettings);
+els.settingsCloseBtn.addEventListener('click', closeSettings);
+els.exportSaveBtn.addEventListener('click', exportSave);
+els.importSaveBtn.addEventListener('click', importSave);
+els.resetSaveBtn.addEventListener('click', resetSave);
+els.reduceMotionBtn.addEventListener('click', toggleReduceMotion);
 els.dailyChestBtn.addEventListener('click', openDailyChest);
 els.chestCloseBtn.addEventListener('click', closeDailyChest);
 els.chestReveal.addEventListener('click', e => { if (e.target.classList.contains('reveal-backdrop')) closeDailyChest(); });
@@ -531,6 +673,8 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) saveG
 loadGame();
 renderCards();
 renderUpgrades();
+renderQuests();
+applySettings();
 updateHud();
 if (!state.tutorialSeen) els.tutorial.classList.remove('hidden');
 requestAnimationFrame(tick);
