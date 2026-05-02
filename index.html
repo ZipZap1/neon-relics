@@ -2,7 +2,8 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#070812" />
   <title>Neon Relics — Premium Idle Card Prototype</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -25,8 +26,11 @@
       <div class="hero-actions">
         <button id="openPackBtn" class="btn primary"><span>Relikt öffnen</span></button>
         <button id="overdriveBtn" class="btn ghost"><span>Overdrive</span></button>
+        <button id="soundBtn" class="btn ghost small"><span>Sound aus</span></button>
       </div>
     </section>
+
+    <section id="offlineBanner" class="offline-banner glass hidden"></section>
 
     <section class="stats-grid">
       <article class="stat-card glass">
@@ -73,6 +77,20 @@
     </section>
   </main>
 
+  <div id="toast" class="toast hidden"></div>
+
+  <div id="tutorial" class="tutorial glass hidden" role="dialog" aria-modal="true">
+    <p class="eyebrow">Kurzanleitung</p>
+    <h2>Baue deine Relikt-Maschine</h2>
+    <ol>
+      <li>Öffne Relikte und sammle Karten.</li>
+      <li>Upgrades erhöhen deine Credits pro Sekunde.</li>
+      <li>Doppelte Karten können fusioniert werden.</li>
+      <li>Overdrive gibt kurzzeitig dreifache Produktion.</li>
+    </ol>
+    <button id="tutorialDoneBtn" class="btn primary">Loslegen</button>
+  </div>
+
   <div id="packReveal" class="pack-reveal hidden" role="dialog" aria-modal="true">
     <div class="reveal-backdrop"></div>
     <div class="reveal-card-wrap">
@@ -88,9 +106,16 @@
       <div class="orb"></div>
       <h3></h3>
       <p></p>
+      <div class="card-meta">
+        <span class="level"></span>
+        <span class="copies"></span>
+      </div>
       <div class="card-footer">
         <span class="power"></span>
-        <button class="mini-btn upgrade-card">Upgrade</button>
+        <div class="card-buttons">
+          <button class="mini-btn upgrade-card">Upgrade</button>
+          <button class="mini-btn fuse-card">Fusion</button>
+        </div>
       </div>
     </article>
   </template>

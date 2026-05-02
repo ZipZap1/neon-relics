@@ -1,26 +1,35 @@
+const SAVE_KEY = 'neon-relics-save-v2';
+const OFFLINE_CAP_SECONDS = 8 * 60 * 60;
+
 const state = {
   credits: 120,
   energy: 0,
   multiplier: 1,
   overdriveUntil: 0,
   packCost: 50,
+  soundEnabled: false,
+  tutorialSeen: false,
   cards: [],
   upgrades: [
     { id: 'reactor', name: 'Quanten-Reaktor', desc: '+25% Produktion aller Relikte.', level: 0, baseCost: 180, effect: 0.25 },
     { id: 'lens', name: 'Prisma-Linse', desc: '+15% Chance auf seltene Karten.', level: 0, baseCost: 260, effect: 0.15 },
-    { id: 'forge', name: 'Fusions-Schmiede', desc: 'Karten-Upgrades werden 10% stärker.', level: 0, baseCost: 420, effect: 0.10 },
+    { id: 'forge', name: 'Fusions-Schmiede', desc: 'Karten-Upgrades und Fusionen werden stärker.', level: 0, baseCost: 420, effect: 0.10 },
   ]
 };
 
 const relics = [
   { name: 'Aether Core', rarity: 'common', power: 2, text: 'Ein stabiler Kern aus kaltem Neonlicht.' },
   { name: 'Pulse Shard', rarity: 'common', power: 3, text: 'Pulsiert ruhig und produziert konstante Credits.' },
+  { name: 'Glass Comet', rarity: 'common', power: 3.5, text: 'Ein Komet aus splitterndem Licht.' },
   { name: 'Vanta Sigil', rarity: 'rare', power: 7, text: 'Ein dunkles Siegel mit türkisfarbener Resonanz.' },
   { name: 'Chrome Lotus', rarity: 'rare', power: 9, text: 'Öffnet sich bei jedem Produktionszyklus.' },
+  { name: 'Neon Mantis', rarity: 'rare', power: 10, text: 'Schneidet Leerlauf aus jeder Maschine.' },
   { name: 'Nova Crown', rarity: 'epic', power: 18, text: 'Eine Krone aus überladener Sternenenergie.' },
   { name: 'Dream Engine', rarity: 'epic', power: 22, text: 'Verwandelt Schlafdaten in Credits. Frag nicht.' },
+  { name: 'Void Harp', rarity: 'epic', power: 26, text: 'Spielt Frequenzen, die Portale öffnen.' },
   { name: 'Solar Wraith', rarity: 'legendary', power: 55, text: 'Ein legendäres Relikt, das Raumlicht verbrennt.' },
   { name: 'Godspark Array', rarity: 'legendary', power: 72, text: 'Eine Maschine, die Maschinen träumen lässt.' },
+  { name: 'Chrono Saint', rarity: 'legendary', power: 88, text: 'Faltet Sekunden zu funkelnden Dividenden.' },
 ];
 
 const rarityWeight = { common: 70, rare: 23, epic: 6, legendary: 1 };
@@ -39,6 +48,11 @@ const els = {
   packCost: document.querySelector('#packCost'),
   openPackBtn: document.querySelector('#openPackBtn'),
   overdriveBtn: document.querySelector('#overdriveBtn'),
+  soundBtn: document.querySelector('#soundBtn'),
+  offlineBanner: document.querySelector('#offlineBanner'),
+  tutorial: document.querySelector('#tutorial'),
+  tutorialDoneBtn: document.querySelector('#tutorialDoneBtn'),
+  toast: document.querySelector('#toast'),
   packReveal: document.querySelector('#packReveal'),
   revealedCard: document.querySelector('#revealedCard'),
   collectBtn: document.querySelector('#collectBtn'),
@@ -49,6 +63,9 @@ const els = {
 let pendingCard = null;
 let last = performance.now();
 let particles = [];
+let saveTimer = 0;
+let toastTimer = 0;
+let audioCtx = null;
 const ctx = els.canvas.getContext('2d');
 
 function resizeCanvas() {
@@ -60,25 +77,131 @@ addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 function format(n) {
+  if (!Number.isFinite(n)) return '0';
+  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(2) + 'B';
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + 'M';
   if (n >= 10_000) return Math.floor(n).toLocaleString('de-DE');
   if (n >= 1000) return n.toFixed(0).toLocaleString('de-DE');
   return n.toFixed(n < 100 ? 1 : 0);
 }
 
-function totalCps() {
-  const reactor = 1 + getUpgrade('reactor').level * getUpgrade('reactor').effect;
-  const forge = 1 + getUpgrade('forge').level * 0.05;
-  return state.cards.reduce((sum, card) => sum + card.power * rarityBonus[card.rarity] * card.level * forge, 0) * reactor * currentMultiplier();
-}
-
-function currentMultiplier() {
-  return performance.now() < state.overdriveUntil ? 3 : state.multiplier;
-}
-
 function getUpgrade(id) { return state.upgrades.find(u => u.id === id); }
 function upgradeCost(upgrade) { return Math.floor(upgrade.baseCost * Math.pow(1.82, upgrade.level)); }
 function cardUpgradeCost(card) { return Math.floor(80 * rarityBonus[card.rarity] * Math.pow(1.65, card.level - 1)); }
+function fuseCost(card) { return Math.floor(55 * rarityBonus[card.rarity] * Math.pow(1.52, card.fusion || 0)); }
+function currentMultiplier() { return performance.now() < state.overdriveUntil ? 3 : state.multiplier; }
+
+function cardProduction(card) {
+  const forge = 1 + getUpgrade('forge').level * 0.05;
+  const fusion = 1 + (card.fusion || 0) * (0.55 + getUpgrade('forge').level * 0.03);
+  return card.power * rarityBonus[card.rarity] * card.level * forge * fusion;
+}
+
+function baseCps() {
+  const reactor = 1 + getUpgrade('reactor').level * getUpgrade('reactor').effect;
+  return state.cards.reduce((sum, card) => sum + cardProduction(card), 0) * reactor;
+}
+
+function totalCps() { return baseCps() * currentMultiplier(); }
+
+function normalizeCard(card) {
+  const base = relics.find(r => r.name === card.name) || relics[0];
+  return {
+    ...base,
+    id: card.id || crypto.randomUUID(),
+    level: Math.max(1, Number(card.level) || 1),
+    power: Number(card.power) || base.power,
+    copies: Math.max(0, Number(card.copies) || 0),
+    fusion: Math.max(0, Number(card.fusion) || 0),
+  };
+}
+
+function loadGame() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) {
+      state.cards.push({ ...relics[0], id: crypto.randomUUID(), level: 1, copies: 0, fusion: 0 });
+      state.cards.push({ ...relics[3], id: crypto.randomUUID(), level: 1, copies: 0, fusion: 0 });
+      return;
+    }
+    const save = JSON.parse(raw);
+    state.credits = Number(save.credits) || state.credits;
+    state.energy = Number(save.energy) || state.energy;
+    state.packCost = Number(save.packCost) || state.packCost;
+    state.soundEnabled = Boolean(save.soundEnabled);
+    state.tutorialSeen = Boolean(save.tutorialSeen);
+    state.cards = Array.isArray(save.cards) ? save.cards.map(normalizeCard) : [];
+    state.upgrades.forEach(upgrade => {
+      const saved = save.upgrades?.find?.(u => u.id === upgrade.id);
+      if (saved) upgrade.level = Math.max(0, Number(saved.level) || 0);
+    });
+    const elapsed = Math.min(OFFLINE_CAP_SECONDS, Math.max(0, (Date.now() - (Number(save.savedAt) || Date.now())) / 1000));
+    if (elapsed > 20 && state.cards.length) {
+      const earned = baseCps() * elapsed * 0.55;
+      state.credits += earned;
+      showOffline(earned, elapsed);
+    }
+    if (!state.cards.length) state.cards.push({ ...relics[0], id: crypto.randomUUID(), level: 1, copies: 0, fusion: 0 });
+  } catch (err) {
+    console.warn('Save konnte nicht geladen werden:', err);
+    state.cards = [{ ...relics[0], id: crypto.randomUUID(), level: 1, copies: 0, fusion: 0 }];
+  }
+}
+
+function saveGame() {
+  const payload = {
+    credits: state.credits,
+    energy: state.energy,
+    packCost: state.packCost,
+    soundEnabled: state.soundEnabled,
+    tutorialSeen: state.tutorialSeen,
+    upgrades: state.upgrades.map(({ id, level }) => ({ id, level })),
+    cards: state.cards.map(({ id, name, level, power, copies, fusion }) => ({ id, name, level, power, copies, fusion })),
+    savedAt: Date.now(),
+  };
+  localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveGame, 250);
+}
+
+function showOffline(earned, elapsed) {
+  const minutes = Math.floor(elapsed / 60);
+  els.offlineBanner.textContent = `Offline-Fortschritt: +${format(earned)} Credits in ${minutes || '<1'} Min. gesammelt.`;
+  els.offlineBanner.classList.remove('hidden');
+  setTimeout(() => els.offlineBanner.classList.add('hidden'), 9000);
+}
+
+function showToast(message) {
+  els.toast.textContent = message;
+  els.toast.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => els.toast.classList.add('hidden'), 2600);
+}
+
+function sound(type) {
+  if (!state.soundEnabled) return;
+  audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+  const now = audioCtx.currentTime;
+  const gain = audioCtx.createGain();
+  gain.connect(audioCtx.destination);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(type === 'legendary' ? 0.08 : 0.045, now + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
+  const notes = {
+    click: [440], buy: [523, 659], pack: [392, 523, 784], fuse: [330, 660, 990], overdrive: [196, 392, 784], legendary: [523, 784, 1046, 1568]
+  }[type] || [440];
+  notes.forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    osc.type = i % 2 ? 'triangle' : 'sine';
+    osc.frequency.setValueAtTime(freq, now + i * 0.055);
+    osc.connect(gain);
+    osc.start(now + i * 0.055);
+    osc.stop(now + 0.42 + i * 0.03);
+  });
+}
 
 function pickRelic() {
   const rareBoost = getUpgrade('lens').level * getUpgrade('lens').effect;
@@ -98,7 +221,7 @@ function pickRelic() {
   }
   const options = relics.filter(r => r.rarity === rarity);
   const base = options[Math.floor(Math.random() * options.length)];
-  return { ...base, id: crypto.randomUUID(), level: 1 };
+  return { ...base, id: crypto.randomUUID(), level: 1, copies: 0, fusion: 0 };
 }
 
 function createCardElement(card, reveal = false) {
@@ -108,16 +231,23 @@ function createCardElement(card, reveal = false) {
   node.querySelector('.rarity-chip').textContent = rarityLabel[card.rarity];
   node.querySelector('h3').textContent = card.name;
   node.querySelector('p').textContent = card.text;
-  node.querySelector('.power').textContent = `⚡ ${format(card.power * card.level * rarityBonus[card.rarity])}/s`;
-  const btn = node.querySelector('.upgrade-card');
-  btn.textContent = `Upgrade ${format(cardUpgradeCost(card))}`;
-  btn.addEventListener('click', () => upgradeCard(card.id, node));
+  node.querySelector('.level').textContent = `Lvl ${card.level} · F${card.fusion || 0}`;
+  node.querySelector('.copies').textContent = `Kopien ${card.copies || 0}/2`;
+  node.querySelector('.power').textContent = `⚡ ${format(cardProduction(card))}/s`;
+  const upgradeBtn = node.querySelector('.upgrade-card');
+  upgradeBtn.textContent = `Upgrade ${format(cardUpgradeCost(card))}`;
+  upgradeBtn.addEventListener('click', () => upgradeCard(card.id, node));
+  const fuseBtn = node.querySelector('.fuse-card');
+  fuseBtn.textContent = `Fusion ${format(fuseCost(card))}`;
+  fuseBtn.disabled = (card.copies || 0) < 2 || state.credits < fuseCost(card);
+  fuseBtn.addEventListener('click', () => fuseCard(card.id, node));
   node.addEventListener('pointermove', (e) => tiltCard(e, node));
   node.addEventListener('pointerleave', () => node.style.transform = '');
   return node;
 }
 
 function tiltCard(e, node) {
+  if (matchMedia('(pointer: coarse)').matches) return;
   const r = node.getBoundingClientRect();
   const x = (e.clientX - r.left) / r.width - .5;
   const y = (e.clientY - r.top) / r.height - .5;
@@ -130,8 +260,6 @@ function renderCards() {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
     empty.textContent = 'Öffne dein erstes Relikt, um die Maschine zu starten.';
-    empty.style.color = 'var(--muted)';
-    empty.style.padding = '32px';
     els.cards.append(empty);
     return;
   }
@@ -155,8 +283,9 @@ function renderUpgrades() {
       if (state.credits < cost) return;
       state.credits -= cost;
       upgrade.level++;
+      sound('buy');
       burst(innerWidth * .2, innerHeight * .42, upgrade.id === 'lens' ? '#ff3ef2' : '#25f4ff', 34);
-      renderUpgrades(); updateHud();
+      renderUpgrades(); renderCards(); updateHud(); scheduleSave();
     });
     els.upgrades.append(node);
   });
@@ -174,7 +303,14 @@ function updateHud() {
   els.packCost.textContent = format(state.packCost);
   els.openPackBtn.disabled = state.credits < state.packCost;
   els.overdriveBtn.disabled = state.energy < 100 || performance.now() < state.overdriveUntil;
+  els.soundBtn.querySelector('span').textContent = state.soundEnabled ? 'Sound an' : 'Sound aus';
   document.querySelectorAll('.upgrade').forEach((node, idx) => node.querySelector('button').disabled = state.credits < upgradeCost(state.upgrades[idx]));
+  document.querySelectorAll('.relic-card:not(.reveal)').forEach((node, idx) => {
+    const card = state.cards[idx];
+    if (!card) return;
+    const fuseBtn = node.querySelector('.fuse-card');
+    if (fuseBtn) fuseBtn.disabled = (card.copies || 0) < 2 || state.credits < fuseCost(card);
+  });
 }
 
 function openPack() {
@@ -185,18 +321,27 @@ function openPack() {
   els.revealedCard.replaceWith(createCardElement(pendingCard, true));
   els.revealedCard = document.querySelector('.relic-card.reveal');
   els.packReveal.classList.remove('hidden');
+  sound(pendingCard.rarity === 'legendary' ? 'legendary' : 'pack');
   burst(innerWidth / 2, innerHeight / 2, colorFor(pendingCard.rarity), pendingCard.rarity === 'legendary' ? 150 : 72);
-  updateHud();
+  updateHud(); scheduleSave();
 }
 
 function collectPending() {
   if (!pendingCard) return;
-  state.cards.unshift(pendingCard);
+  const existing = state.cards.find(card => card.name === pendingCard.name);
+  if (existing) {
+    existing.copies = (existing.copies || 0) + 1;
+    existing.power *= 1.04;
+    showToast(`Duplikat gesammelt: ${existing.name} (+1 Kopie)`);
+  } else {
+    state.cards.unshift(pendingCard);
+    showToast(`${pendingCard.name} aufgenommen`);
+  }
   state.energy += 12 * rarityBonus[pendingCard.rarity];
   burst(innerWidth / 2, innerHeight / 2, colorFor(pendingCard.rarity), 45);
   pendingCard = null;
   els.packReveal.classList.add('hidden');
-  renderCards(); renderUpgrades(); updateHud();
+  renderCards(); renderUpgrades(); updateHud(); scheduleSave();
 }
 
 function upgradeCard(id, node) {
@@ -207,16 +352,39 @@ function upgradeCard(id, node) {
   card.level++;
   card.power *= 1.18;
   const r = node.getBoundingClientRect();
+  sound('buy');
   burst(r.left + r.width / 2, r.top + r.height / 2, colorFor(card.rarity), 34);
-  renderCards(); renderUpgrades(); updateHud();
+  renderCards(); renderUpgrades(); updateHud(); scheduleSave();
+}
+
+function fuseCard(id, node) {
+  const card = state.cards.find(c => c.id === id);
+  const cost = fuseCost(card);
+  if (!card || (card.copies || 0) < 2 || state.credits < cost) return;
+  state.credits -= cost;
+  card.copies -= 2;
+  card.fusion = (card.fusion || 0) + 1;
+  card.power *= 1.42;
+  const r = node.getBoundingClientRect();
+  sound('fuse');
+  burst(r.left + r.width / 2, r.top + r.height / 2, colorFor(card.rarity), 95);
+  showToast(`${card.name} fusioniert → F${card.fusion}`);
+  renderCards(); renderUpgrades(); updateHud(); scheduleSave();
 }
 
 function activateOverdrive() {
   if (state.energy < 100 || performance.now() < state.overdriveUntil) return;
   state.energy -= 100;
   state.overdriveUntil = performance.now() + 15000;
+  sound('overdrive');
   burst(innerWidth / 2, 120, '#49ffb2', 110);
-  updateHud();
+  updateHud(); scheduleSave();
+}
+
+function toggleSound() {
+  state.soundEnabled = !state.soundEnabled;
+  if (state.soundEnabled) sound('click');
+  updateHud(); scheduleSave();
 }
 
 function colorFor(rarity) {
@@ -254,8 +422,7 @@ function renderParticles(dt) {
 function tick(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  const cps = totalCps();
-  state.credits += cps * dt;
+  state.credits += totalCps() * dt;
   state.energy += state.cards.length ? dt * 0.8 * currentMultiplier() : 0;
   renderParticles(dt);
   updateHud();
@@ -265,12 +432,23 @@ function tick(now) {
 els.openPackBtn.addEventListener('click', openPack);
 els.collectBtn.addEventListener('click', collectPending);
 els.overdriveBtn.addEventListener('click', activateOverdrive);
+els.soundBtn.addEventListener('click', toggleSound);
+els.tutorialDoneBtn.addEventListener('click', () => {
+  state.tutorialSeen = true;
+  els.tutorial.classList.add('hidden');
+  sound('click');
+  scheduleSave();
+});
 els.packReveal.addEventListener('click', e => { if (e.target.classList.contains('reveal-backdrop')) collectPending(); });
+addEventListener('beforeunload', saveGame);
+setInterval(saveGame, 10000);
 
-state.cards.push({ ...relics[0], id: crypto.randomUUID(), level: 1 });
-state.cards.push({ ...relics[2], id: crypto.randomUUID(), level: 1 });
+document.addEventListener('visibilitychange', () => { if (document.hidden) saveGame(); });
+
+loadGame();
 renderCards();
 renderUpgrades();
 updateHud();
+if (!state.tutorialSeen) els.tutorial.classList.remove('hidden');
 requestAnimationFrame(tick);
 setTimeout(() => burst(innerWidth / 2, 160, '#25f4ff', 80), 500);
