@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./icon.svg" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -31,6 +33,22 @@
     </section>
 
     <section id="offlineBanner" class="offline-banner glass hidden"></section>
+
+    <section class="zone-panel glass">
+      <div>
+        <p class="eyebrow">Current Zone</p>
+        <h2 id="zoneName">Neon District</h2>
+        <p id="zoneDesc">Stabilisiere dein erstes Relikt-Netz.</p>
+      </div>
+      <div class="zone-progress-wrap">
+        <div class="zone-progress-meta">
+          <span id="zoneGoal">Ziel: 0 CPS</span>
+          <strong id="zoneProgressText">0%</strong>
+        </div>
+        <div class="zone-progress"><span id="zoneProgressBar"></span></div>
+      </div>
+      <button id="dailyChestBtn" class="btn ghost chest-btn"><span>Daily Chest</span></button>
+    </section>
 
     <section class="stats-grid">
       <article class="stat-card glass">
@@ -79,6 +97,17 @@
 
   <div id="toast" class="toast hidden"></div>
 
+  <div id="chestReveal" class="chest-reveal hidden" role="dialog" aria-modal="true">
+    <div class="reveal-backdrop"></div>
+    <div class="chest-box glass">
+      <div class="chest-icon">✦</div>
+      <p class="eyebrow">Daily Chest</p>
+      <h2 id="chestTitle">Belohnung erhalten</h2>
+      <p id="chestReward">+0 Credits</p>
+      <button id="chestCloseBtn" class="btn primary">Einsammeln</button>
+    </div>
+  </div>
+
   <div id="tutorial" class="tutorial glass hidden" role="dialog" aria-modal="true">
     <p class="eyebrow">Kurzanleitung</p>
     <h2>Baue deine Relikt-Maschine</h2>
@@ -121,5 +150,10 @@
   </template>
 
   <script src="./game.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+    }
+  </script>
 </body>
 </html>

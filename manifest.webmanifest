@@ -1,0 +1,14 @@
+{
+  "name": "Neon Relics",
+  "short_name": "NeonRelics",
+  "description": "Premium idle card hybrid prototype with neon relics, fusion and daily rewards.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#070812",
+  "theme_color": "#070812",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

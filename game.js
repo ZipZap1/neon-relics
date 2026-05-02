@@ -9,6 +9,8 @@ const state = {
   packCost: 50,
   soundEnabled: false,
   tutorialSeen: false,
+  zone: 0,
+  lastDailyChest: '',
   cards: [],
   upgrades: [
     { id: 'reactor', name: 'Quanten-Reaktor', desc: '+25% Produktion aller Relikte.', level: 0, baseCost: 180, effect: 0.25 },
@@ -36,6 +38,14 @@ const rarityWeight = { common: 70, rare: 23, epic: 6, legendary: 1 };
 const rarityLabel = { common: 'Common', rare: 'Rare', epic: 'Epic', legendary: 'Legendary' };
 const rarityBonus = { common: 1, rare: 1.7, epic: 3.1, legendary: 7 };
 
+const zones = [
+  { name: 'Neon District', desc: 'Stabilisiere dein erstes Relikt-Netz.', goal: 20, reward: 250 },
+  { name: 'Chrome Bazaar', desc: 'Schalte den Markt der leuchtenden Maschinen frei.', goal: 85, reward: 900 },
+  { name: 'Vanta Arcade', desc: 'Bring die Schatten-Generatoren online.', goal: 240, reward: 2800 },
+  { name: 'Solar Spire', desc: 'Skaliere deine Produktion bis in die oberen Türme.', goal: 720, reward: 8500 },
+  { name: 'Godspark Gate', desc: 'Öffne das Tor für legendäre Reliktketten.', goal: 1800, reward: 26000 },
+];
+
 const els = {
   credits: document.querySelector('#credits'),
   energy: document.querySelector('#energy'),
@@ -49,6 +59,16 @@ const els = {
   openPackBtn: document.querySelector('#openPackBtn'),
   overdriveBtn: document.querySelector('#overdriveBtn'),
   soundBtn: document.querySelector('#soundBtn'),
+  dailyChestBtn: document.querySelector('#dailyChestBtn'),
+  zoneName: document.querySelector('#zoneName'),
+  zoneDesc: document.querySelector('#zoneDesc'),
+  zoneGoal: document.querySelector('#zoneGoal'),
+  zoneProgressText: document.querySelector('#zoneProgressText'),
+  zoneProgressBar: document.querySelector('#zoneProgressBar'),
+  chestReveal: document.querySelector('#chestReveal'),
+  chestTitle: document.querySelector('#chestTitle'),
+  chestReward: document.querySelector('#chestReward'),
+  chestCloseBtn: document.querySelector('#chestCloseBtn'),
   offlineBanner: document.querySelector('#offlineBanner'),
   tutorial: document.querySelector('#tutorial'),
   tutorialDoneBtn: document.querySelector('#tutorialDoneBtn'),
@@ -130,6 +150,8 @@ function loadGame() {
     state.packCost = Number(save.packCost) || state.packCost;
     state.soundEnabled = Boolean(save.soundEnabled);
     state.tutorialSeen = Boolean(save.tutorialSeen);
+    state.zone = Math.max(0, Math.min(zones.length - 1, Number(save.zone) || 0));
+    state.lastDailyChest = String(save.lastDailyChest || '');
     state.cards = Array.isArray(save.cards) ? save.cards.map(normalizeCard) : [];
     state.upgrades.forEach(upgrade => {
       const saved = save.upgrades?.find?.(u => u.id === upgrade.id);
@@ -155,6 +177,8 @@ function saveGame() {
     packCost: state.packCost,
     soundEnabled: state.soundEnabled,
     tutorialSeen: state.tutorialSeen,
+    zone: state.zone,
+    lastDailyChest: state.lastDailyChest,
     upgrades: state.upgrades.map(({ id, level }) => ({ id, level })),
     cards: state.cards.map(({ id, name, level, power, copies, fusion }) => ({ id, name, level, power, copies, fusion })),
     savedAt: Date.now(),
@@ -179,6 +203,60 @@ function showToast(message) {
   els.toast.classList.remove('hidden');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => els.toast.classList.add('hidden'), 2600);
+}
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function currentZone() {
+  return zones[Math.min(state.zone, zones.length - 1)];
+}
+
+function updateZoneHud() {
+  const zone = currentZone();
+  const cps = baseCps();
+  const progress = Math.min(1, cps / zone.goal);
+  els.zoneName.textContent = `${state.zone + 1}. ${zone.name}`;
+  els.zoneDesc.textContent = zone.desc;
+  els.zoneGoal.textContent = `Ziel: ${format(zone.goal)} CPS`;
+  els.zoneProgressText.textContent = `${Math.floor(progress * 100)}%`;
+  els.zoneProgressBar.style.width = `${progress * 100}%`;
+  els.dailyChestBtn.disabled = state.lastDailyChest === todayKey();
+  els.dailyChestBtn.querySelector('span').textContent = state.lastDailyChest === todayKey() ? 'Chest abgeholt' : 'Daily Chest';
+}
+
+function checkZoneProgress() {
+  const zone = currentZone();
+  if (baseCps() < zone.goal || state.zone >= zones.length - 1) return;
+  state.credits += zone.reward;
+  state.energy += 35 + state.zone * 15;
+  state.zone++;
+  sound('legendary');
+  burst(innerWidth / 2, 170, '#ffd166', 160);
+  showToast(`Zone freigeschaltet: ${currentZone().name} · +${format(zone.reward)} Credits`);
+  scheduleSave();
+}
+
+function openDailyChest() {
+  const today = todayKey();
+  if (state.lastDailyChest === today) return;
+  const rewardCredits = Math.floor(350 + baseCps() * 90 + state.zone * 450);
+  const rewardEnergy = 45 + state.zone * 10;
+  state.credits += rewardCredits;
+  state.energy += rewardEnergy;
+  state.lastDailyChest = today;
+  els.chestTitle.textContent = 'Daily Chest geöffnet';
+  els.chestReward.textContent = `+${format(rewardCredits)} Credits · +${format(rewardEnergy)} Energie`;
+  els.chestReveal.classList.remove('hidden');
+  sound('legendary');
+  burst(innerWidth / 2, innerHeight / 2, '#ffd166', 130);
+  updateHud();
+  scheduleSave();
+}
+
+function closeDailyChest() {
+  els.chestReveal.classList.add('hidden');
 }
 
 function sound(type) {
@@ -304,6 +382,7 @@ function updateHud() {
   els.openPackBtn.disabled = state.credits < state.packCost;
   els.overdriveBtn.disabled = state.energy < 100 || performance.now() < state.overdriveUntil;
   els.soundBtn.querySelector('span').textContent = state.soundEnabled ? 'Sound an' : 'Sound aus';
+  updateZoneHud();
   document.querySelectorAll('.upgrade').forEach((node, idx) => node.querySelector('button').disabled = state.credits < upgradeCost(state.upgrades[idx]));
   document.querySelectorAll('.relic-card:not(.reveal)').forEach((node, idx) => {
     const card = state.cards[idx];
@@ -425,6 +504,7 @@ function tick(now) {
   state.credits += totalCps() * dt;
   state.energy += state.cards.length ? dt * 0.8 * currentMultiplier() : 0;
   renderParticles(dt);
+  checkZoneProgress();
   updateHud();
   requestAnimationFrame(tick);
 }
@@ -433,6 +513,9 @@ els.openPackBtn.addEventListener('click', openPack);
 els.collectBtn.addEventListener('click', collectPending);
 els.overdriveBtn.addEventListener('click', activateOverdrive);
 els.soundBtn.addEventListener('click', toggleSound);
+els.dailyChestBtn.addEventListener('click', openDailyChest);
+els.chestCloseBtn.addEventListener('click', closeDailyChest);
+els.chestReveal.addEventListener('click', e => { if (e.target.classList.contains('reveal-backdrop')) closeDailyChest(); });
 els.tutorialDoneBtn.addEventListener('click', () => {
   state.tutorialSeen = true;
   els.tutorial.classList.add('hidden');
